@@ -31,19 +31,37 @@ public class FABRIK : MonoBehaviour
         ObjectiveLastPosition = Objective.position;
     }
 
-    void ReorientateJoint(FABRIKJoint joint1, FABRIKJoint joint2)    //Reorientates Joint1 to Joint2
+    void ReorientateJoint(FABRIKJoint joint1, FABRIKJoint joint2)    //Reorientates Joint1 to Joint2, UP must always face next joint!
     {
+        Vector3 dir = (joint2.transform.position - joint1.transform.position).normalized;
+        Vector3 fwd = joint1.JointConstraintType == FABRIKJoint.JointType.Hinge ? joint1.OriginalForward : joint1.transform.forward;
+        Quaternion rotation = Quaternion.LookRotation(Vector3.Cross(joint1.transform.right, dir), dir);
         joint2.transform.parent = null;
-        joint1.transform.LookAt(joint2.transform);
-        joint1.transform.Rotate(new Vector3(1, 0, 0), 90f);
+        joint1.transform.rotation = rotation;
         joint2.transform.parent = joint1.transform;
     }
+
+    void HingeConstraint(FABRIKJoint Hinge, FABRIKJoint Joint)
+    {
+        if (Hinge.JointConstraintType != FABRIKJoint.JointType.Hinge)
+            return;
+        Vector3 JointProjected = Vector3.ProjectOnPlane(Joint.transform.position, Hinge.transform.forward);
+        Vector3 HingeProjected = Vector3.ProjectOnPlane(Hinge.transform.position, Hinge.transform.forward);
+        Vector3 LocalPos = JointProjected - HingeProjected;
+
+        Joint.transform.position = Hinge.transform.position + LocalPos;
+    }
+
 
     void BackwardReach()
     {
         Joints[0].transform.position = InitialRootLocation;
+        ReorientateJoint(Joints[0], Joints[1]);
+
         for (int i = 1; i < Joints.Count; i++)
         {
+            HingeConstraint(Joints[i - 1], Joints[i]);
+
             RaycastHit hit;
             Vector3 dir = (Joints[i].transform.position - Joints[i - 1].transform.position);
             Ray ray = new Ray(Joints[i].transform.position, dir.normalized);
@@ -61,8 +79,11 @@ public class FABRIK : MonoBehaviour
     void ForwardReach()
     {
         Joints[Joints.Count - 1].transform.position = Objective.position;
+        ReorientateJoint(Joints[Joints.Count - 1], Joints[Joints.Count - 2]);
         for (int i = Joints.Count - 1; i > 0; i--)
         {
+            Joints[i - 1].transform.parent = null;
+            HingeConstraint(Joints[i], Joints[i - 1]);
             RaycastHit hit;
             Vector3 dir = (Joints[i].transform.position - Joints[i - 1].transform.position);
             Ray ray = new Ray(Joints[i - 1].transform.position, dir.normalized);
@@ -72,7 +93,6 @@ public class FABRIK : MonoBehaviour
             float r = Lengths[i - 1];
             float d = Vector3.Distance(Joints[i - 1].transform.position, Joints[i].transform.position);
             float lambda = r/d;
-            Joints[i - 1].transform.parent = null;
             Joints[i - 1].transform.position = Joints[i - 1].transform.position * lambda + Joints[i].transform.position * (1f - lambda);
             ReorientateJoint(Joints[i-1], Joints[i]);
         }
@@ -89,14 +109,12 @@ public class FABRIK : MonoBehaviour
             Debug.Log("Target is unreachable.");
             for (int i = 1; i < Joints.Count; i++)
             {
-                float r = Vector3.Distance(Joints[i].transform.position, Joints[i - 1].transform.position);
-                float d = Vector3.Distance(Joints[i - 1].transform.position, Objective.transform.position);
+                float r = Vector3.Distance(Joints[i].transform.position, Joints[i-1].transform.position);
+                float d = Vector3.Distance(Joints[i-1].transform.position, Objective.transform.position);
                 float lambda = r / d;
-                Joints[i].transform.position = Joints[i - 1].transform.position * (1f - lambda) + Objective.position * lambda;
-                Joints[i].transform.parent = null;  //In order to perform the local translation without moving the children
-                Joints[i - 1].transform.LookAt(Joints[i].transform);
-                Joints[i - 1].transform.Rotate(new Vector3(1, 0, 0), 90f);
-                Joints[i].transform.parent = Joints[i - 1].transform;
+
+                Joints[i].transform.position = Joints[i-1].transform.position * (1f - lambda) + Objective.position * lambda;
+                ReorientateJoint(Joints[i-1], Joints[i]);
             }
         }
         else

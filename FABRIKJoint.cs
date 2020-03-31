@@ -16,12 +16,12 @@ public class FABRIKJoint : MonoBehaviour
     public float angleMin2;
     public float angleMax2;
 
-    public Quaternion OriginalRotator;
+    public Vector3 OriginalForward;
 
     // Start is called before the first frame update
     void Start()
     {
-        OriginalRotator = transform.rotation;
+        OriginalForward = transform.forward;
     }
 
     // Update is called once per frame
