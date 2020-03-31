@@ -22,12 +22,14 @@ public class FABRIK : MonoBehaviour
         Lengths = new List<float>();
         foreach(FABRIKJoint t in transform.GetComponentsInChildren<FABRIKJoint>())
                 Joints.Add(t);
+
         TotalLength = 0f;
         for (int i = 1; i < Joints.Count; i++)
         {
             Lengths.Add(Vector3.Distance(Joints[i].transform.position, Joints[i - 1].transform.position));
             TotalLength += Lengths[i - 1];
         }
+
         ObjectiveLastPosition = Objective.position;
     }
 
@@ -36,6 +38,7 @@ public class FABRIK : MonoBehaviour
         Vector3 dir = (joint2.transform.position - joint1.transform.position).normalized;
         Vector3 fwd = joint1.JointConstraintType == FABRIKJoint.JointType.Hinge ? joint1.OriginalForward : joint1.transform.forward;
         Quaternion rotation = Quaternion.LookRotation(Vector3.Cross(joint1.transform.right, dir), dir);
+ 
         joint2.transform.parent = null;
         joint1.transform.rotation = rotation;
         joint2.transform.parent = joint1.transform;
@@ -45,13 +48,13 @@ public class FABRIK : MonoBehaviour
     {
         if (Hinge.JointConstraintType != FABRIKJoint.JointType.Hinge)
             return;
+
         Vector3 JointProjected = Vector3.ProjectOnPlane(Joint.transform.position, Hinge.transform.forward);
         Vector3 HingeProjected = Vector3.ProjectOnPlane(Hinge.transform.position, Hinge.transform.forward);
         Vector3 LocalPos = JointProjected - HingeProjected;
 
         Joint.transform.position = Hinge.transform.position + LocalPos;
     }
-
 
     void BackwardReach()
     {
@@ -98,8 +101,8 @@ public class FABRIK : MonoBehaviour
         }
     }
 
-    // LateUpdate is called once, every physics frame
-    void LateUpdate()
+    // Run at each physics simulation step
+    void FixedUpdate()
     {
         if (Vector3.Distance(Objective.position, ObjectiveLastPosition) < 0.05f) return;
         ObjectiveLastPosition = Objective.position;
