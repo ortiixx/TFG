@@ -11,10 +11,10 @@ public class FABRIKJoint : MonoBehaviour
         Rotator
     }
     public JointType JointConstraintType;
-    public float angleMin1;
-    public float angleMax1;
-    public float angleMin2;
-    public float angleMax2;
+    public float angle1;
+    public float angle2;
+    public float angle3;
+    public float angle4;
 
     public Vector3 OriginalForward;
 

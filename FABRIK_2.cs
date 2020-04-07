@@ -2,15 +2,15 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class FABRIK : MonoBehaviour
+public class FABRIK_2 : MonoBehaviour
 {
-    public List<FABRIKJoint> Joints;
+    public List<Rigidbody> Joints;
     public Transform Objective;
     public Vector3 InitialRootLocation;
     public float Threshold = 0.24f;
     public int MaxIterations = 10;
     private float TotalLength = 0f;
-    private List<float> Lengths;         //length[i] = Distance(i,i+1)
+    public List<float> Lengths;         //length[i] = Distance(i,i+1)
     public LayerMask layerMask;
     public Vector3 ObjectiveLastPosition;
 
@@ -18,10 +18,14 @@ public class FABRIK : MonoBehaviour
     void Start()
     {
         InitialRootLocation = transform.position;
-        Joints = new List<FABRIKJoint>();
+        Joints = new List<Rigidbody>();
         Lengths = new List<float>();
-        foreach(FABRIKJoint t in transform.GetComponentsInChildren<FABRIKJoint>())
-                Joints.Add(t);
+        foreach (CharacterJoint t in transform.GetComponentsInChildren<CharacterJoint>())
+        {
+            Rigidbody rb = t.GetComponent<Rigidbody>();
+            rb.isKinematic = true;
+            Joints.Add(rb);
+        }
 
         TotalLength = 0f;
         for (int i = 1; i < Joints.Count; i++)
@@ -72,28 +76,60 @@ public class FABRIK : MonoBehaviour
         }
     }
 
-    void ReorientateJoint(FABRIKJoint joint1, FABRIKJoint joint2)    //Reorientates Joint1 to Joint2, UP must always face next joint!
+    bool HasNoLimits(CharacterJoint CJ)
     {
-        Vector3 dir = (joint2.transform.position - joint1.transform.position).normalized;
-        Vector3 fwd = joint1.JointConstraintType == FABRIKJoint.JointType.Hinge ? joint1.OriginalForward : joint1.transform.forward;
-        Quaternion rotation = Quaternion.LookRotation(Vector3.Cross(joint1.transform.right, dir), dir);
-        joint2.transform.parent = null;
-        joint1.transform.Rotate(Vector3.up * 90f);
-        joint1.transform.LookAt(joint2.transform.position, joint2.transform.up);
-        joint1.transform.Rotate(Vector3.up * -90f);
-        joint2.transform.parent = joint1.transform;
+        bool b1 = (int)CJ.highTwistLimit.limit == 0 && (int)CJ.lowTwistLimit.limit == 0;
+        bool b2 = (int)CJ.swing1Limit.limit == 0 && (int)CJ.swing2Limit.limit == 0;
+
+        return b1 && b2;
     }
 
-    void HingeConstraint(FABRIKJoint Hinge, FABRIKJoint Joint)
+
+    void ReorientateJoint(Transform joint1, Transform joint2)    //Reorientates Joint1 to Joint2, UP must always face next joint!
     {
-        if (Hinge.JointConstraintType != FABRIKJoint.JointType.Hinge)
+        joint2.transform.parent = null;
+        CharacterJoint CJ = joint1.GetComponent<CharacterJoint>();
+        if (HasNoLimits(CJ))
+        {
+            Quaternion q1 = Quaternion.LookRotation(joint2.transform.position - joint1.transform.position, transform.parent.up);
+            Quaternion q0 = Quaternion.Euler(0, -90f, 0);   //Adapt to different spaces
+            joint1.transform.rotation = q1*q0;
             return;
+        }
+        else
+        {
+            float Limit1 = 90f;
+            float Limit2 = 90f;
+            Quaternion q0 = joint1.parent.rotation;// *Quaternion.FromToRotation(Vector3.up, Vector3.forward);   //Adapt to different spaces
+            Vector3 dir = (joint2.position - joint1.position).normalized;
+            Vector3 dirP1 = Vector3.ProjectOnPlane(dir, q0 * Vector3.right);
+            Vector3 dirP2 = Vector3.ProjectOnPlane(dir, q0 * Vector3.up);
+            float Angle1 = Vector3.Angle(q0 * Vector3.forward, dirP1) * Mathf.Sign(Vector3.Dot(Vector3.Cross(q0 * Vector3.forward, dirP1), q0 * Vector3.right));
+            float Angle2 = Vector3.Angle(q0 * Vector3.forward, dirP2) * Mathf.Sign(Vector3.Dot(Vector3.Cross(q0 * Vector3.forward, dirP2), q0 * Vector3.up));
+            Angle1 = Mathf.Clamp(Angle1, -Limit1, Limit1);
+            Angle2 = Mathf.Clamp(Angle2, -Limit2, Limit2);
+            Debug.Log(Angle1);
+            Quaternion q1 = Quaternion.AngleAxis(Angle1, q0 * Vector3.right);
+            Quaternion q2 = Quaternion.AngleAxis(Angle2, q0 * Vector3.up);
+            joint1.rotation = q1 * q2;
 
-        Vector3 JointProjected = Vector3.ProjectOnPlane(Joint.transform.position, Hinge.transform.forward);
-        Vector3 HingeProjected = Vector3.ProjectOnPlane(Hinge.transform.position, Hinge.transform.forward);
-        Vector3 LocalPos = JointProjected - HingeProjected;
+        }
+        joint2.transform.parent = joint1.transform;
 
-        Joint.transform.position = Hinge.transform.position + LocalPos;
+
+    }
+
+    void HingeConstraint(Rigidbody Hinge, Rigidbody Joint)
+    {
+        CharacterJoint Cj = Hinge.GetComponent<CharacterJoint>();
+        if ((int)Cj.swing1Limit.limit == 0 && 0 == (int)Cj.swing2Limit.limit)
+        {
+            Vector3 JointProjected = Vector3.ProjectOnPlane(Joint.transform.position, Hinge.transform.forward);
+            Vector3 HingeProjected = Vector3.ProjectOnPlane(Hinge.transform.position, Hinge.transform.forward);
+            Vector3 LocalPos = JointProjected - HingeProjected;
+
+            Joint.transform.position = Hinge.transform.position + LocalPos;
+        }
     }
 
     void SocketBallConstraint(FABRIKJoint SocketBall, FABRIKJoint Joint)
@@ -133,23 +169,19 @@ public class FABRIK : MonoBehaviour
     void BackwardReach()
     {
         Joints[0].transform.position = InitialRootLocation;
-        ReorientateJoint(Joints[0], Joints[1]);
 
         for (int i = 1; i < Joints.Count; i++)
         {
-            HingeConstraint(Joints[i - 1], Joints[i]);
-            //SocketBallConstraint(Joints[i - 1], Joints[i]);
             RaycastHit hit;
             Vector3 dir = (Joints[i].transform.position - Joints[i - 1].transform.position);
             Ray ray = new Ray(Joints[i].transform.position, dir.normalized);
             if (Physics.Raycast(ray, out hit, dir.magnitude, layerMask))
                 Joints[i].transform.position = hit.point + hit.normal * 0.02f;
+            Joints[i].transform.parent = null;
+            ReorientateJoint(Joints[i - 1].transform, Joints[i].transform);
+            Joints[i].transform.position = Joints[i - 1].transform.position + Joints[i - 1].transform.right * Lengths[i-1];
+            Joints[i].transform.parent = Joints[i-1].transform;
 
-            float r = Lengths[i - 1];
-            float d = Vector3.Distance(Joints[i - 1].transform.position, Joints[i].transform.position);
-            float lambda = r/d;
-            Joints[i].transform.position = Joints[i - 1].transform.position * (1f - lambda) + Joints[i].transform.position * lambda;
-            ReorientateJoint(Joints[i - 1], Joints[i]);
         }
     }
 
@@ -158,9 +190,6 @@ public class FABRIK : MonoBehaviour
         Joints[Joints.Count - 1].transform.position = Objective.position;
         for (int i = Joints.Count - 1; i > 0; i--)
         {
-            Joints[i - 1].transform.parent = null;
-            HingeConstraint(Joints[i], Joints[i - 1]);
-            //SocketBallConstraint(Joints[i], Joints[i-1]);
             RaycastHit hit;
             Vector3 dir = (Joints[i].transform.position - Joints[i - 1].transform.position);
             Ray ray = new Ray(Joints[i - 1].transform.position, dir.normalized);
@@ -171,7 +200,6 @@ public class FABRIK : MonoBehaviour
             float d = Vector3.Distance(Joints[i - 1].transform.position, Joints[i].transform.position);
             float lambda = r/d;
             Joints[i - 1].transform.position = Joints[i - 1].transform.position * lambda + Joints[i].transform.position * (1f - lambda);
-            ReorientateJoint(Joints[i-1], Joints[i]);
         }
     }
 
@@ -191,7 +219,7 @@ public class FABRIK : MonoBehaviour
                 float lambda = r / d;
 
                 Joints[i].transform.position = Joints[i-1].transform.position * (1f - lambda) + Objective.position * lambda;
-                ReorientateJoint(Joints[i-1], Joints[i]);
+                ReorientateJoint(Joints[i-1].transform, Joints[i].transform);
             }
         }
         else
