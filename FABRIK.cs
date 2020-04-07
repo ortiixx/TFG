@@ -4,24 +4,34 @@ using UnityEngine;
 
 public class FABRIK : MonoBehaviour
 {
-    public List<FABRIKJoint> Joints;
+    public List<Transform> Joints;
     public Transform Objective;
     public Vector3 InitialRootLocation;
     public float Threshold = 0.24f;
     public int MaxIterations = 10;
     private float TotalLength = 0f;
-    private List<float> Lengths;         //length[i] = Distance(i,i+1)
+    public List<float> Lengths;         //length[i] = Distance(i,i+1)
     public LayerMask layerMask;
     public Vector3 ObjectiveLastPosition;
+    Quaternion quatero;
 
     // Start is called before the first frame update
     void Start()
     {
         InitialRootLocation = transform.position;
-        Joints = new List<FABRIKJoint>();
+        Joints = new List<Transform>();
         Lengths = new List<float>();
-        foreach(FABRIKJoint t in transform.GetComponentsInChildren<FABRIKJoint>())
-                Joints.Add(t);
+        foreach (FABRIKJoint t in transform.GetComponentsInChildren<FABRIKJoint>())
+        {
+            Rigidbody rb = t.GetComponent<Rigidbody>();
+            if (rb)
+            {
+                rb.isKinematic = true;
+                rb.GetComponent<Collider>().enabled = false;
+                rb.detectCollisions = false;
+                Joints.Add(t.transform);
+            }
+        }
 
         TotalLength = 0f;
         for (int i = 1; i < Joints.Count; i++)
@@ -29,7 +39,6 @@ public class FABRIK : MonoBehaviour
             Lengths.Add(Vector3.Distance(Joints[i].transform.position, Joints[i - 1].transform.position));
             TotalLength += Lengths[i - 1];
         }
-
         ObjectiveLastPosition = Objective.position;
     }
 
@@ -72,106 +81,85 @@ public class FABRIK : MonoBehaviour
         }
     }
 
-    void ReorientateJoint(FABRIKJoint joint1, FABRIKJoint joint2)    //Reorientates Joint1 to Joint2, UP must always face next joint!
+    bool HasNoLimits(CharacterJoint CJ)
     {
-        Vector3 dir = (joint2.transform.position - joint1.transform.position).normalized;
-        Vector3 fwd = joint1.JointConstraintType == FABRIKJoint.JointType.Hinge ? joint1.OriginalForward : joint1.transform.forward;
-        Quaternion rotation = Quaternion.LookRotation(Vector3.Cross(joint1.transform.right, dir), dir);
+        bool b1 = (int)CJ.highTwistLimit.limit == 0 && (int)CJ.lowTwistLimit.limit == 0;
+        bool b2 = (int)CJ.swing1Limit.limit == 0 && (int)CJ.swing2Limit.limit == 0;
+
+        return b1 && b2;
+    }
+
+    void ReorientateJoint(Transform joint1, Transform joint2)    //Reorientates Joint1 to Joint2, UP must always face next joint!
+    {
         joint2.transform.parent = null;
-        joint1.transform.Rotate(Vector3.up * 90f);
-        joint1.transform.LookAt(joint2.transform.position, joint2.transform.up);
-        joint1.transform.Rotate(Vector3.up * -90f);
-        joint2.transform.parent = joint1.transform;
-    }
 
-    void HingeConstraint(FABRIKJoint Hinge, FABRIKJoint Joint)
-    {
-        if (Hinge.JointConstraintType != FABRIKJoint.JointType.Hinge)
-            return;
+        Vector3 up = joint1.parent ? joint1.parent.up : Vector3.up;
+        Quaternion q1 = Quaternion.LookRotation(joint2.transform.position - joint1.transform.position, up);
+        Quaternion q0 = Quaternion.Euler(0, -90f, 0);   //Adapt to different spaces
+        joint1.transform.rotation = q1 * q0;
+        joint2.transform.parent = joint1;
+        /*
+        Vector3 newFwd = Vector3.right;
+        Vector3 newUp = -Vector3.up;
+        Vector3 newRight = -Vector3.forward;
+        Quaternion qrot = Quaternion.LookRotation(Vector3.right, -Vector3.up);
 
-        Vector3 JointProjected = Vector3.ProjectOnPlane(Joint.transform.position, Hinge.transform.forward);
-        Vector3 HingeProjected = Vector3.ProjectOnPlane(Hinge.transform.position, Hinge.transform.forward);
-        Vector3 LocalPos = JointProjected - HingeProjected;
+        joint2.transform.parent = null;
+        FABRIKJoint JointInfo = joint1.GetComponent<FABRIKJoint>();
+        Quaternion originalQuat = joint1.parent.rotation*qrot;
+        Vector3 dir = Vector3.Normalize(joint2.position - joint1.position);
 
-        Joint.transform.position = Hinge.transform.position + LocalPos;
-    }
+        Vector3 dirXZ = Vector3.ProjectOnPlane(dir, originalQuat * Vector3.up); //Dir projected in the plane with normal local-up
+        float AngleX = Vector3.SignedAngle(originalQuat * Vector3.forward, dirXZ, originalQuat * Vector3.up);
+        AngleX = Mathf.Clamp(AngleX, JointInfo.angle1, JointInfo.angle2);
+        Quaternion q0 = Quaternion.AngleAxis(AngleX, qrot*Vector3.up);
 
-    void SocketBallConstraint(FABRIKJoint SocketBall, FABRIKJoint Joint)
-    {
-        if (SocketBall.JointConstraintType != FABRIKJoint.JointType.SocketBall)
-            return;
-        Vector3 LocalPos = Joint.transform.position - SocketBall.transform.position;
-        Vector3 newPos = Vector3.Project(LocalPos, SocketBall.transform.right);
-        Vector3 O = SocketBall.transform.position + newPos;
+        Vector3 dirYZ = Vector3.ProjectOnPlane(dir, q0 * originalQuat * Vector3.right); //Dir projected in the plane with normal local-up
+        float AngleY = Vector3.SignedAngle(q0 * originalQuat * Vector3.forward, dirYZ, q0 * originalQuat * Vector3.up);
+        AngleY = Mathf.Clamp(AngleY, JointInfo.angle3, JointInfo.angle4);
+        Quaternion q1 = Quaternion.AngleAxis(AngleY, qrot*Vector3.right);
 
-        float l1 = newPos.magnitude * Mathf.Tan(Mathf.Deg2Rad * SocketBall.angle1);
-        float l2 = newPos.magnitude * Mathf.Tan(Mathf.Deg2Rad * SocketBall.angle2);
-        float l3 = newPos.magnitude * Mathf.Tan(Mathf.Deg2Rad * SocketBall.angle3);
-        float l4 = newPos.magnitude * Mathf.Tan(Mathf.Deg2Rad * SocketBall.angle4);
-        Debug.DrawLine(SocketBall.transform.position, O, Color.red, 30f);
-        Debug.DrawLine(SocketBall.transform.position, O + -SocketBall.transform.up * l1, Color.red, 30f); //l1 ynegaxis
-        Debug.DrawLine(SocketBall.transform.position, O + SocketBall.transform.up * l2, Color.blue, 30f); //l2 yposaxis
-        Debug.DrawLine(SocketBall.transform.position, O + SocketBall.transform.forward * l3, Color.cyan, 30f); //l3 xposaxis
-        Debug.DrawLine(SocketBall.transform.position, O + -SocketBall.transform.forward * l4, Color.black, 30f); //l4 xnegaxis
-        Debug.DrawLine(Vector3.zero, Vector3.zero, Color.red, 30f);
-        Debug.DrawLine(Vector3.zero, Vector3.zero + Vector3.right * l1, Color.red, 30f);
-        Debug.DrawLine(Vector3.zero, Vector3.zero + -Vector3.right * l2, Color.blue, 30f);
-        Debug.DrawLine(Vector3.zero, Vector3.zero + Vector3.forward * l3, Color.cyan, 30f);
-        Debug.DrawLine(Vector3.zero, Vector3.zero + -Vector3.forward * l4, Color.black, 30f);
-        Vector3 Pos = Vector3.zero;
-        Vector3 dir = Joint.transform.position - SocketBall.transform.position;
-        Pos.x = Vector3.Dot(-SocketBall.transform.up, dir);
-        Pos.z = Vector3.Dot(SocketBall.transform.forward, dir);
-        Joint.transform.position = Pos;
-        Vector2 pos = GetQuadrantPosition(Joint.transform.position, l1, l2, l3, l4);
-        Vector3 result = O;
-        result -= SocketBall.transform.up * pos.x;
-        result += SocketBall.transform.forward * pos.y;
-        Joint.transform.position = result;
+        joint1.rotation = joint1.parent.rotation * q0 * q1;
+
+        joint2.transform.parent = joint1.transform;*/
+
     }
 
     void BackwardReach()
     {
         Joints[0].transform.position = InitialRootLocation;
-        ReorientateJoint(Joints[0], Joints[1]);
 
         for (int i = 1; i < Joints.Count; i++)
         {
-            HingeConstraint(Joints[i - 1], Joints[i]);
-            //SocketBallConstraint(Joints[i - 1], Joints[i]);
-            RaycastHit hit;
+            /*RaycastHit hit;
             Vector3 dir = (Joints[i].transform.position - Joints[i - 1].transform.position);
             Ray ray = new Ray(Joints[i].transform.position, dir.normalized);
             if (Physics.Raycast(ray, out hit, dir.magnitude, layerMask))
-                Joints[i].transform.position = hit.point + hit.normal * 0.02f;
-
-            float r = Lengths[i - 1];
-            float d = Vector3.Distance(Joints[i - 1].transform.position, Joints[i].transform.position);
-            float lambda = r/d;
-            Joints[i].transform.position = Joints[i - 1].transform.position * (1f - lambda) + Joints[i].transform.position * lambda;
-            ReorientateJoint(Joints[i - 1], Joints[i]);
+                Joints[i].transform.position = hit.point + hit.normal * 0.02f;*/
+            FABRIKJoint Fab = Joints[i - 1].GetComponent<FABRIKJoint>();
+            Joints[i].transform.parent = null;
+            ReorientateJoint(Joints[i - 1].transform, Joints[i].transform);
+            Joints[i].transform.position = Joints[i - 1].transform.position + Joints[i-1].rotation*Fab.JointForward * Lengths[i - 1];
+            Joints[i].transform.parent = Joints[i - 1].transform;
         }
     }
 
     void ForwardReach()
     {
+        Debug.DrawLine(Joints[Joints.Count - 1].position, Objective.position, Color.red, 1f);
         Joints[Joints.Count - 1].transform.position = Objective.position;
         for (int i = Joints.Count - 1; i > 0; i--)
         {
-            Joints[i - 1].transform.parent = null;
-            HingeConstraint(Joints[i], Joints[i - 1]);
-            //SocketBallConstraint(Joints[i], Joints[i-1]);
-            RaycastHit hit;
+            /*RaycastHit hit;
             Vector3 dir = (Joints[i].transform.position - Joints[i - 1].transform.position);
             Ray ray = new Ray(Joints[i - 1].transform.position, dir.normalized);
             if (Physics.Raycast(ray, out hit, dir.magnitude, layerMask))
-                Joints[i].transform.position = hit.point + hit.normal * 0.02f;
+                Joints[i].transform.position = hit.point + hit.normal * 0.02f;*/
 
             float r = Lengths[i - 1];
             float d = Vector3.Distance(Joints[i - 1].transform.position, Joints[i].transform.position);
-            float lambda = r/d;
+            float lambda = r / d;
             Joints[i - 1].transform.position = Joints[i - 1].transform.position * lambda + Joints[i].transform.position * (1f - lambda);
-            ReorientateJoint(Joints[i-1], Joints[i]);
         }
     }
 
@@ -186,18 +174,19 @@ public class FABRIK : MonoBehaviour
             Debug.Log("Target is unreachable.");
             for (int i = 1; i < Joints.Count; i++)
             {
-                float r = Vector3.Distance(Joints[i].transform.position, Joints[i-1].transform.position);
-                float d = Vector3.Distance(Joints[i-1].transform.position, Objective.transform.position);
+                float r = Vector3.Distance(Joints[i].transform.position, Joints[i - 1].transform.position);
+                float d = Vector3.Distance(Joints[i - 1].transform.position, Objective.transform.position);
                 float lambda = r / d;
 
-                Joints[i].transform.position = Joints[i-1].transform.position * (1f - lambda) + Objective.position * lambda;
-                ReorientateJoint(Joints[i-1], Joints[i]);
+                Joints[i].transform.position = Joints[i - 1].transform.position * (1f - lambda) + Objective.position * lambda;
+                ReorientateJoint(Joints[i - 1].transform, Joints[i].transform);
             }
         }
         else
         {
             Debug.Log("Target is reachable.");
-            for (int c = 0; c < MaxIterations && Vector3.Distance(Joints[Joints.Count - 1].transform.position, Objective.position) > Threshold; c++){
+            for (int c = 0; c < MaxIterations && Vector3.Distance(Joints[Joints.Count - 1].transform.position, Objective.position) > Threshold; c++)
+            {
                 ForwardReach();    //FORWARD PASS
                 BackwardReach();   //BACKWARD PASS
             }

@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿/*
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -13,6 +14,7 @@ public class FABRIK_2 : MonoBehaviour
     public List<float> Lengths;         //length[i] = Distance(i,i+1)
     public LayerMask layerMask;
     public Vector3 ObjectiveLastPosition;
+    Quaternion quatero;
 
     // Start is called before the first frame update
     void Start()
@@ -33,8 +35,9 @@ public class FABRIK_2 : MonoBehaviour
             Lengths.Add(Vector3.Distance(Joints[i].transform.position, Joints[i - 1].transform.position));
             TotalLength += Lengths[i - 1];
         }
-
+        TotalLength += 0.25f;
         ObjectiveLastPosition = Objective.position;
+        quatero = Joints[0].rotation;
     }
 
     Vector2 GetClosestPoint(Vector2 pos1, float l1, float l2)
@@ -84,34 +87,42 @@ public class FABRIK_2 : MonoBehaviour
         return b1 && b2;
     }
 
-
     void ReorientateJoint(Transform joint1, Transform joint2)    //Reorientates Joint1 to Joint2, UP must always face next joint!
     {
         joint2.transform.parent = null;
         CharacterJoint CJ = joint1.GetComponent<CharacterJoint>();
-        if (HasNoLimits(CJ))
+        if (false && HasNoLimits(CJ))
         {
-            Quaternion q1 = Quaternion.LookRotation(joint2.transform.position - joint1.transform.position, transform.parent.up);
+            Vector3 up = joint1.parent ? joint1.parent.up : Vector3.up;
+            Quaternion q1 = Quaternion.LookRotation(joint2.transform.position - joint1.transform.position, up);
             Quaternion q0 = Quaternion.Euler(0, -90f, 0);   //Adapt to different spaces
             joint1.transform.rotation = q1*q0;
             return;
         }
         else
         {
-            float Limit1 = 90f;
-            float Limit2 = 90f;
-            Quaternion q0 = joint1.parent.rotation;// *Quaternion.FromToRotation(Vector3.up, Vector3.forward);   //Adapt to different spaces
-            Vector3 dir = (joint2.position - joint1.position).normalized;
-            Vector3 dirP1 = Vector3.ProjectOnPlane(dir, q0 * Vector3.right);
-            Vector3 dirP2 = Vector3.ProjectOnPlane(dir, q0 * Vector3.up);
-            float Angle1 = Vector3.Angle(q0 * Vector3.forward, dirP1) * Mathf.Sign(Vector3.Dot(Vector3.Cross(q0 * Vector3.forward, dirP1), q0 * Vector3.right));
-            float Angle2 = Vector3.Angle(q0 * Vector3.forward, dirP2) * Mathf.Sign(Vector3.Dot(Vector3.Cross(q0 * Vector3.forward, dirP2), q0 * Vector3.up));
-            Angle1 = Mathf.Clamp(Angle1, -Limit1, Limit1);
-            Angle2 = Mathf.Clamp(Angle2, -Limit2, Limit2);
-            Debug.Log(Angle1);
-            Quaternion q1 = Quaternion.AngleAxis(Angle1, q0 * Vector3.right);
-            Quaternion q2 = Quaternion.AngleAxis(Angle2, q0 * Vector3.up);
-            joint1.rotation = q1 * q2;
+            Quaternion originalQuat = joint1.parent ? joint1.parent.rotation : quatero;
+            Vector3 dir = Vector3.Normalize(joint2.position - joint1.position);
+            Vector3 newFwd = Vector3.right;
+            Vector3 newUp = -Vector3.up;
+            Vector3 newRight = -Vector3.forward;
+
+            Vector3 dirXZ = Vector3.ProjectOnPlane(dir, originalQuat * newUp); //Dir projected in the plane with normal local-up
+            float AngleX = Vector3.SignedAngle(originalQuat * newFwd, dirXZ, originalQuat * newUp);
+            AngleX = Mathf.Clamp(AngleX, -360, 360);
+            Quaternion q0 = Quaternion.AngleAxis(AngleX, newRight);
+
+            Vector3 dirYZ = Vector3.ProjectOnPlane(dir, q0 * originalQuat * newRight); //Dir projected in the plane with normal local-up
+            float AngleY = Vector3.SignedAngle(q0 * originalQuat * newFwd, dirYZ, q0 * originalQuat * newRight);
+            AngleY = Mathf.Clamp(AngleY, -360, 360);
+            Quaternion q1 = Quaternion.AngleAxis(AngleY, newUp);
+
+            joint1.rotation = originalQuat * q0 * q1;
+            Debug.Log("Angle X: "+ AngleX);
+            Debug.Log("Angle Y: " + AngleY);
+            //Debug.DrawRay(transform.position, dir * 10, Color.red, 2f);
+            //Debug.DrawRay(transform.position, originalQuat * Vector3.forward * 10, Color.blue, 2f);
+            //Debug.DrawRay(transform.position, transform.rotation*newFwd * 10, Color.blue, 2f);
 
         }
         joint2.transform.parent = joint1.transform;
@@ -232,3 +243,4 @@ public class FABRIK_2 : MonoBehaviour
         }
     }
 }
+*/
