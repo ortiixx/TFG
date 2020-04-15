@@ -13,7 +13,7 @@ public class FABRIK : MonoBehaviour
     public List<float> Lengths;         //length[i] = Distance(i,i+1)
     public LayerMask layerMask;
     public Vector3 ObjectiveLastPosition;
-    public Quaternion parentR;
+    public Vector3 parentV;
     Quaternion quatero;
 
     // Start is called before the first frame update
@@ -41,7 +41,7 @@ public class FABRIK : MonoBehaviour
             TotalLength += Lengths[i - 1];
         }
         ObjectiveLastPosition = Objective.position;
-        parentR = Joints[0].transform.rotation;
+        parentV = Joints[0].up;
     }
 
     Vector2 GetClosestPoint(Vector2 pos1, float l1, float l2)
@@ -51,6 +51,37 @@ public class FABRIK : MonoBehaviour
         else
             return MathHelpers.ClosestPointEllipse(pos1, l2, l1);
     }
+
+    void SocketBallConstraint(Transform SocketBall, Transform Joint)
+    {
+        FABRIKJoint FJ = SocketBall.GetComponent<FABRIKJoint>();
+
+        Vector3 LocalPos = Joint.transform.position - SocketBall.transform.position;
+        Vector3 LocalUp = transform.rotation * FJ.TwistAxis;
+        Vector3 LocalRight = transform.rotation * FJ.Axis;
+        Vector3 LocalFwd = Vector3.Cross(LocalUp, LocalRight);
+
+        Vector3 newPos = Vector3.Project(LocalPos, LocalFwd);
+        Vector3 O = SocketBall.transform.position + newPos;
+
+        float l1 = newPos.magnitude * Mathf.Tan(Mathf.Deg2Rad * FJ.angle1);
+        float l2 = newPos.magnitude * Mathf.Tan(Mathf.Deg2Rad * FJ.angle2);
+        float l3 = newPos.magnitude * Mathf.Tan(Mathf.Deg2Rad * FJ.angle3);
+        float l4 = newPos.magnitude * Mathf.Tan(Mathf.Deg2Rad * FJ.angle4);
+
+        Vector3 Pos = Vector3.zero;
+        Vector3 dir = Joint.transform.position - SocketBall.transform.position;
+        Pos.x = Vector3.Dot(-LocalUp, dir);
+        Pos.z = Vector3.Dot(LocalRight, dir);
+        Joint.transform.position = Pos;
+        Vector2 pos = GetQuadrantPosition(Joint.transform.position, l1, l2, l3, l4);
+        Vector3 result = O;
+        result -= LocalUp * pos.x;
+        result += LocalRight * pos.y;
+        Joint.transform.position = result;
+    }
+
+
 
     Vector2 GetQuadrantPosition(Vector3 Orpos, float l1, float l2, float l3, float l4)
     { //Quadrants counter-clockwise
@@ -93,9 +124,21 @@ public class FABRIK : MonoBehaviour
 
     void ReorientateJoint(Transform joint1, Transform joint2)    //Reorientates Joint1 to Joint2, UP must always face next joint!
     {
+        FABRIKJoint FJ = joint1.GetComponent<FABRIKJoint>();
+        Vector3 Axis = FJ.Axis;
+        Vector3 TwistAxis = FJ.Axis;
+        Vector3 Forward = FJ.Forward;
+        Vector3 originalUp = joint1 == Joints[0] ? parentV : joint1.parent.up;
+        if(joint1 == Joints[0])
+            Debug.Log("yes");
         joint2.transform.parent = null;
 
-        FABRIKJoint FJ = joint1.GetComponent<FABRIKJoint>();
+        Vector3 dir = joint2.position - joint1.position;
+        Quaternion q0 = Quaternion.LookRotation(dir, parentV);
+        Quaternion q = Quaternion.LookRotation(Forward);
+        joint1.rotation = q0*Quaternion.Inverse(q);
+
+        /*
 
         Quaternion originalQuat = joint1 == Joints[0] ? parentR : joint1.parent.rotation;
         Vector3 Axis = FJ.Axis;
@@ -116,7 +159,7 @@ public class FABRIK : MonoBehaviour
         Quaternion q1 = Quaternion.AngleAxis(AngleY, Axis);
 
         joint1.rotation = originalQuat * q0 * q1;
-
+        */
 
         joint2.transform.parent = joint1;
     }
@@ -134,6 +177,7 @@ public class FABRIK : MonoBehaviour
                 Joints[i].transform.position = hit.point + hit.normal * 0.02f;*/
             FABRIKJoint Fab = Joints[i - 1].GetComponent<FABRIKJoint>();
             Joints[i].transform.parent = null;
+            //SocketBallConstraint(Joints[i - 1], Joints[i]);
             ReorientateJoint(Joints[i - 1].transform, Joints[i].transform);
             Joints[i].transform.position = Joints[i - 1].transform.position + Joints[i-1].rotation*Fab.Forward * Lengths[i - 1];
             Joints[i].transform.parent = Joints[i - 1].transform;

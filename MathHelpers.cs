@@ -79,4 +79,15 @@ public class MathHelpers : MonoBehaviour
 
         return quaternion;
     }
+
+    public static void Quat2VecAngle(Quaternion quat, out Vector3 dir, out float angle)
+    {
+        angle = Mathf.Acos(quat.w)*2;
+        float s = Mathf.Sin(angle * 0.5f);
+        dir.x = quat.x / s;
+        dir.y = quat.y / s;
+        dir.z = quat.z / s;
+        angle *= Mathf.Rad2Deg;
+    }
 }
+

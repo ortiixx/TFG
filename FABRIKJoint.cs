@@ -17,7 +17,7 @@ public class FABRIKJoint : MonoBehaviour
         if (Axis != Vector3.zero && TwistAxis != Vector3.zero)
             Forward = Vector3.Cross(Axis, TwistAxis);
         else
-            Debug.LogError("Axis not set!");
+            Debug.LogError("Axis not set at " + transform.name);
     }   
 
     // Update is called once per frame
