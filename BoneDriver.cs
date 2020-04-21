@@ -64,6 +64,26 @@ public class BoneDriver : MonoBehaviour
         Vector3 dir;
         float angle;
         Vector3 TargetAngularSpeed = ComputeDesiredAngularSpeed(lastOrientation, AnimBone.rotation);
+        Quaternion q2 = lastOrientation * Quaternion.Inverse(rb.rotation);
+        if (q2 != Quaternion.identity)
+        {
+            CharacterJoint Cj = rb.GetComponent<CharacterJoint>();
+            if (Cj)
+                Cj.enableProjection = true;
+            rb.isKinematic = false;
+            MathHelpers.Quat2VecAngle(q2, out dir, out angle);
+            rb.angularDrag = angularDrag;
+            rb.drag = Drag;
+            //rb.detectCollisions = false;
+            rb.AddTorque(dir * angle * k1 + k2 * (TargetAngularSpeed - rb.angularVelocity), ForceMode.VelocityChange);
+        }
+    }
+    /*
+    void FollowBone(Rigidbody rb, Transform AnimBone, Quaternion lastOrientation)
+    {
+        Vector3 dir;
+        float angle;
+        Vector3 TargetAngularSpeed = ComputeDesiredAngularSpeed(lastOrientation, AnimBone.rotation);
         Quaternion q2 = AnimBone.rotation * Quaternion.Inverse(rb.rotation);
         if (q2 != Quaternion.identity)
         {
@@ -77,7 +97,21 @@ public class BoneDriver : MonoBehaviour
             //rb.detectCollisions = false;
             rb.AddTorque(dir * angle * k1 + k2*(TargetAngularSpeed-rb.angularVelocity), ForceMode.VelocityChange);
         }
+    }*/
+
+    //TODO: Make drags equal to original
+    void SetUnbalanced()
+    {
+        Rigidbody rb = gameObject.GetComponent<Rigidbody>();
+        if (!rb)
+            Debug.LogError("Root has not a ribidbody!");
+        else
+        {
+            rb.constraints = RigidbodyConstraints.None;
+            k1 = 0;
+        }
     }
+
 
     // Update is called once per frame
     void FixedUpdate()
@@ -94,5 +128,6 @@ public class BoneDriver : MonoBehaviour
             BodyP.lastOrientation = AnimBone.rotation;
             BodyMapper[k.Key] = BodyP;
         }
+        //SetUnbalanced();
     }
 }

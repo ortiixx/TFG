@@ -4,11 +4,17 @@ using UnityEngine;
 
 public class FABRIKJoint : MonoBehaviour
 {
+    public enum JointType
+    {
+        Hinge,
+        Socketball
+    }
+
     public float angle1;
     public float angle2;
     public float angle3;
     public float angle4;
-
+    public JointType RestrictionType = JointType.Socketball;
     public Vector3 Axis;
     public Vector3 TwistAxis;
     public Vector3 Forward;

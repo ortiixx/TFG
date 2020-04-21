@@ -30,6 +30,14 @@ public class SocketBallTest : MonoBehaviour
             return MathHelpers.ClosestPointEllipse(pos1, l2, l1);
     }
 
+    void HingeConstraint(Transform Hinge, Transform Child)
+    {
+        Vector3 ProjectedPosition1 = Vector3.ProjectOnPlane(Child.position, Hinge.right);
+        Vector3 ProjectedPosition2 = Vector3.ProjectOnPlane(Hinge.position, Hinge.right);
+        Vector3 RelativePosition = ProjectedPosition1 - ProjectedPosition2;
+        Child.position = Hinge.position + RelativePosition;
+    }
+
     Vector2 GetQuadrantPosition(Vector3 Orpos, float l1, float l2, float l3, float l4)
     { //Quadrants counter-clockwise
         Vector2 Pos = new Vector2(Orpos.x, Orpos.z);
@@ -102,6 +110,6 @@ public class SocketBallTest : MonoBehaviour
 
     private void Update()
     {
-        SocketBallConstraint(this.transform, Child);
+        HingeConstraint(this.transform, Child);
     }
 }
