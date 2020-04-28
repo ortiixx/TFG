@@ -13,9 +13,19 @@ public class BoneDriver : MonoBehaviour
         public float weight;
         public Transform followTransform;
         public Quaternion lastOrientation;
+        public float drag;
+        public float angularDrag;
     }
 
     public Transform animationsRoot;
+    public Transform LeftFoot;
+    public Transform RightFoot;
+    public Transform Chest;
+    public Transform Head;
+    public Vector3 GroundNormal = Vector3.up;
+    public float FootLength;
+    public float FootVerticalOffset;
+    public float FootHorizontalOffset;
     public float k1 = 2f;
     public float k2 = 1f;
     public float angularDrag = 10f;
@@ -28,13 +38,19 @@ public class BoneDriver : MonoBehaviour
         Transform[] bonesAnimations = animationsRoot.GetComponentsInChildren<Transform>(true);
         Transform[] bonesRagdoll = transform.GetComponentsInChildren<Transform>(true);
         BodyMapper = new Dictionary<Transform, BodyPart>();
-        var result = bonesRagdoll.Zip(bonesAnimations, (first, second) => new Tuple<Transform, Transform>(first,second));
+        var result = bonesRagdoll.Zip(bonesAnimations, (first, second) => new Tuple<Transform, Transform>(first, second));
         foreach (Tuple<Transform, Transform> t in result)
         {
+            Rigidbody rb = t.Item2.GetComponent<Rigidbody>();
             BodyPart b = new BodyPart();
             b.weight = 1.0f;
             b.followTransform = t.Item2;
             b.lastOrientation = t.Item2.rotation;
+            if (rb)
+            {
+                b.drag = rb.drag;
+                b.angularDrag = rb.angularDrag;
+            }
             BodyMapper[t.Item1] = b;
         }
     }
@@ -78,26 +94,6 @@ public class BoneDriver : MonoBehaviour
             rb.AddTorque(dir * angle * k1 + k2 * (TargetAngularSpeed - rb.angularVelocity), ForceMode.VelocityChange);
         }
     }
-    /*
-    void FollowBone(Rigidbody rb, Transform AnimBone, Quaternion lastOrientation)
-    {
-        Vector3 dir;
-        float angle;
-        Vector3 TargetAngularSpeed = ComputeDesiredAngularSpeed(lastOrientation, AnimBone.rotation);
-        Quaternion q2 = AnimBone.rotation * Quaternion.Inverse(rb.rotation);
-        if (q2 != Quaternion.identity)
-        {
-            CharacterJoint Cj = rb.GetComponent<CharacterJoint>();
-            if(Cj)
-                Cj.enableProjection = true;
-            rb.isKinematic = false;
-            MathHelpers.Quat2VecAngle(q2, out dir, out angle);
-            rb.angularDrag = angularDrag;
-            rb.drag = Drag;
-            //rb.detectCollisions = false;
-            rb.AddTorque(dir * angle * k1 + k2*(TargetAngularSpeed-rb.angularVelocity), ForceMode.VelocityChange);
-        }
-    }*/
 
     //TODO: Make drags equal to original
     void SetUnbalanced()
@@ -109,14 +105,106 @@ public class BoneDriver : MonoBehaviour
         {
             rb.constraints = RigidbodyConstraints.None;
             k1 = 0;
+            foreach (KeyValuePair<Transform, BodyPart> k in BodyMapper.ToList())
+            {
+                Rigidbody rb2 = k.Key.GetComponent<Rigidbody>();
+                if (!rb2) continue;
+                rb2.drag = k.Value.drag;
+                rb2.angularDrag = k.Value.angularDrag;
+            }
         }
+    }
+
+    float CheckPointRatio(Vector3 bp1, Vector3 bp2, Vector3 p1, Vector3 p2, Vector3 p3, Vector3 p4)
+    {
+        Vector2 segmentInter = Vector2.zero;
+        float totalLength = Vector3.Distance(bp1,bp2);
+        float intersectionLength = 0.0f;
+        List<Vector2> segments = new List<Vector2>();
+        if (MathHelpers.SegmentIntersection(bp1, bp2, p1, p2, out segmentInter)) segments.Add(new Vector2(segmentInter.x,segmentInter.y));
+        if (MathHelpers.SegmentIntersection(bp1, bp2, p2, p3, out segmentInter)) segments.Add(new Vector2(segmentInter.x, segmentInter.y));
+        if (MathHelpers.SegmentIntersection(bp1, bp2, p3, p4, out segmentInter)) segments.Add(new Vector2(segmentInter.x, segmentInter.y));
+        if (MathHelpers.SegmentIntersection(bp1, bp2, p4, p1, out segmentInter)) segments.Add(new Vector2(segmentInter.x, segmentInter.y));
+
+        if (segments.Count == 2)
+        {
+            intersectionLength = Vector2.Distance(segments[0], segments[1]);
+            Debug.Log("Caramba!");
+        }
+        else
+        {
+            Vector2 bp12d = new Vector2(bp1.x, bp1.z);
+            Vector2 bp22d = new Vector2(bp2.x, bp2.z);
+            if (MathHelpers.CheckPointInQuad(bp1, p1, p2, p3, p4))
+                intersectionLength = Vector2.Distance(bp12d, segments[0]);
+            else
+                intersectionLength = Vector2.Distance(bp22d, segments[0]);
+        }
+        return intersectionLength / totalLength;
+    }
+
+    void CollapseBody(out Vector2[] parts)
+    {
+        parts = new Vector2[BodyMapper.Count];
+        float counterPos = 0;
+        float counterTot = 0;
+        Vector3 p1 = Vector3.ProjectOnPlane(LeftFoot.transform.position + LeftFoot.transform.up * FootVerticalOffset - LeftFoot.transform.forward * FootHorizontalOffset, Vector3.up);
+        Vector3 p2 = Vector3.ProjectOnPlane(RightFoot.transform.position - RightFoot.transform.up * FootVerticalOffset + LeftFoot.transform.forward * FootHorizontalOffset, Vector3.up);
+        Vector3 p3 = Vector3.ProjectOnPlane(p2 + RightFoot.transform.up * FootLength, Vector3.up);
+        Vector3 p4 = Vector3.ProjectOnPlane(p1 - LeftFoot.transform.up * FootLength, Vector3.up);
+
+        foreach (KeyValuePair<Transform, BodyPart> k in BodyMapper.ToList())
+        {
+            FABRIKJoint FB = k.Key.GetComponent<FABRIKJoint>();
+            Collider c = k.Key.GetComponent<Collider>();
+            Rigidbody rb = k.Key.GetComponent<Rigidbody>();
+            if (FB && c && rb)
+            {
+                counterTot += rb.mass;
+                Vector3 bp1 = Vector3.ProjectOnPlane(FB.transform.position, Vector3.up);
+                Vector3 bp2 = Vector3.ProjectOnPlane(FB.transform.position + FB.transform.rotation * FB.Forward * c.bounds.size.y, Vector3.up);
+                //Debug.DrawLine(FB.transform.position, FB.transform.position + FB.transform.rotation * FB.Forward * c.bounds.size.y, Color.green);
+                //Debug.DrawLine(Vector3.ProjectOnPlane(FB.transform.position, Vector3.up), Vector3.ProjectOnPlane(FB.transform.position + FB.transform.rotation * FB.Forward * c.bounds.size.y, Vector3.up), Color.red);
+                bool b1 = MathHelpers.CheckPointInQuad(bp1, p1, p2, p3, p4);
+                bool b2 = MathHelpers.CheckPointInQuad(bp2, p1, p2, p3, p4);
+                if (b1 && b2)
+                {
+                    Debug.DrawLine(bp1, bp2, Color.green);
+                    counterPos += rb.mass;
+                }
+                else if (b1 != b2)
+                {
+                    Debug.DrawLine(bp1, bp2, Color.yellow);
+                    counterPos += rb.mass*CheckPointRatio(bp1,bp2,p1,p2,p3,p4);
+                }
+                else
+                {
+                    Debug.DrawLine(bp1, bp2, Color.red);
+                }
+            }
+        }
+        float balanceFactor = counterPos / counterTot;
+        Debug.Log("Balancing factor: " + balanceFactor);
+        Debug.DrawLine(p1, p2, Color.blue);
+        Debug.DrawLine(p3, p4, Color.blue);
+        Debug.DrawLine(p2, p3, Color.blue);
+        Debug.DrawLine(p4, p1, Color.blue);
+        if (balanceFactor < 0.5f)
+            SetUnbalanced();
+    }
+
+    float CalculateBalanceFactor()
+    {
+        Vector2[] BodyCollapsed;
+        CollapseBody(out BodyCollapsed);
+        return 0.0f;
     }
 
 
     // Update is called once per frame
     void FixedUpdate()
     {
-        foreach(KeyValuePair<Transform, BodyPart> k in BodyMapper.ToList())
+        foreach (KeyValuePair<Transform, BodyPart> k in BodyMapper.ToList())
         {
             Transform RagdollBone = k.Key;
             BodyPart BodyP = k.Value;
@@ -128,6 +216,6 @@ public class BoneDriver : MonoBehaviour
             BodyP.lastOrientation = AnimBone.rotation;
             BodyMapper[k.Key] = BodyP;
         }
-        //SetUnbalanced();
+        CalculateBalanceFactor();
     }
 }

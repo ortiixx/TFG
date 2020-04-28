@@ -89,5 +89,59 @@ public class MathHelpers : MonoBehaviour
         dir.z = quat.z / s;
         angle *= Mathf.Rad2Deg;
     }
+
+    public static bool CheckPointInQuad(Vector3 bp1, Vector3 p1, Vector3 p2, Vector3 p3, Vector3 p4)
+    {
+        float f1 = Mathf.Sign(Vector3.Cross(bp1 - p1, p2 - p1).y);
+        float f2 = Mathf.Sign(Vector3.Cross(bp1 - p2, p3 - p2).y);
+        float f3 = Mathf.Sign(Vector3.Cross(bp1 - p3, p4 - p3).y);
+        float f4 = Mathf.Sign(Vector3.Cross(bp1 - p4, p1 - p4).y);
+        return f1 == f2 && f3 == f4 && f4 == f1;
+    }
+
+    public static bool SegmentIntersection(Vector3 p1, Vector3 p2, Vector3 p3, Vector3 p4, out Vector2 intersection)
+    {
+        float f1 = Mathf.Sign(Vector3.Cross(p2 - p1, p3 - p1).y);
+        float f2 = Mathf.Sign(Vector3.Cross(p2 - p1, p4 - p1).y);
+        float f3 = Mathf.Sign(Vector3.Cross(p4 - p3, p1 - p3).y);
+        float f4 = Mathf.Sign(Vector3.Cross(p4 - p3, p2 - p3).y);
+        intersection = Vector2.zero;
+        if (f1 * f2 < 0 && f3 * f4 < 0)
+        {
+            Vector2 p21 = new Vector2(p1.x, p1.z);
+            Vector2 p22 = new Vector2(p2.x, p2.z);
+            Vector2 p23 = new Vector2(p3.x, p3.z);
+            Vector2 p24 = new Vector2(p4.x, p4.z);
+            MathHelpers.LineSegmentsIntersection(p21, p22, p23, p24, out intersection);
+            return true;
+        }
+        return false;
+    }
+
+
+    public static bool LineSegmentsIntersection(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, out Vector2 intersection)
+    {
+        intersection = Vector2.zero;
+
+        var d = (p2.x - p1.x) * (p4.y - p3.y) - (p2.y - p1.y) * (p4.x - p3.x);
+
+        if (d == 0.0f)
+        {
+            return false;
+        }
+
+        var u = ((p3.x - p1.x) * (p4.y - p3.y) - (p3.y - p1.y) * (p4.x - p3.x)) / d;
+        var v = ((p3.x - p1.x) * (p2.y - p1.y) - (p3.y - p1.y) * (p2.x - p1.x)) / d;
+
+        if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f)
+        {
+            return false;
+        }
+
+        intersection.x = p1.x + u * (p2.x - p1.x);
+        intersection.y = p1.y + u * (p2.y - p1.y);
+
+        return true;
+    }
 }
 
