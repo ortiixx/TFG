@@ -91,12 +91,13 @@ public class BoneDriver : MonoBehaviour
             rb.angularDrag = angularDrag;
             rb.drag = Drag;
             //rb.detectCollisions = false;
-            rb.AddTorque(dir * angle * k1 + k2 * (TargetAngularSpeed - rb.angularVelocity), ForceMode.VelocityChange);
+            Vector3 Torque = new Vector3(q2.x, q2.y, q2.z);
+            rb.AddTorque(Torque* k1 - k2 * rb.angularVelocity, ForceMode.VelocityChange);
         }
     }
 
     //TODO: Make drags equal to original
-    void SetUnbalanced()
+    public void SetUnbalanced()
     {
         Rigidbody rb = gameObject.GetComponent<Rigidbody>();
         if (!rb)
@@ -129,7 +130,6 @@ public class BoneDriver : MonoBehaviour
         if (segments.Count == 2)
         {
             intersectionLength = Vector2.Distance(segments[0], segments[1]);
-            Debug.Log("Caramba!");
         }
         else
         {
@@ -143,9 +143,8 @@ public class BoneDriver : MonoBehaviour
         return intersectionLength / totalLength;
     }
 
-    void CollapseBody(out Vector2[] parts)
+    public float GetBalanceFactor()
     {
-        parts = new Vector2[BodyMapper.Count];
         float counterPos = 0;
         float counterTot = 0;
         Vector3 p1 = Vector3.ProjectOnPlane(LeftFoot.transform.position + LeftFoot.transform.up * FootVerticalOffset - LeftFoot.transform.forward * FootHorizontalOffset, Vector3.up);
@@ -163,8 +162,8 @@ public class BoneDriver : MonoBehaviour
                 counterTot += rb.mass;
                 Vector3 bp1 = Vector3.ProjectOnPlane(FB.transform.position, Vector3.up);
                 Vector3 bp2 = Vector3.ProjectOnPlane(FB.transform.position + FB.transform.rotation * FB.Forward * c.bounds.size.y, Vector3.up);
-                //Debug.DrawLine(FB.transform.position, FB.transform.position + FB.transform.rotation * FB.Forward * c.bounds.size.y, Color.green);
-                //Debug.DrawLine(Vector3.ProjectOnPlane(FB.transform.position, Vector3.up), Vector3.ProjectOnPlane(FB.transform.position + FB.transform.rotation * FB.Forward * c.bounds.size.y, Vector3.up), Color.red);
+                Debug.DrawLine(FB.transform.position, FB.transform.position + FB.transform.rotation * FB.Forward * c.bounds.size.y, Color.green);
+                Debug.DrawLine(Vector3.ProjectOnPlane(FB.transform.position, Vector3.up), Vector3.ProjectOnPlane(FB.transform.position + FB.transform.rotation * FB.Forward * c.bounds.size.y, Vector3.up), Color.red);
                 bool b1 = MathHelpers.CheckPointInQuad(bp1, p1, p2, p3, p4);
                 bool b2 = MathHelpers.CheckPointInQuad(bp2, p1, p2, p3, p4);
                 if (b1 && b2)
@@ -184,26 +183,36 @@ public class BoneDriver : MonoBehaviour
             }
         }
         float balanceFactor = counterPos / counterTot;
-        Debug.Log("Balancing factor: " + balanceFactor);
         Debug.DrawLine(p1, p2, Color.blue);
         Debug.DrawLine(p3, p4, Color.blue);
         Debug.DrawLine(p2, p3, Color.blue);
         Debug.DrawLine(p4, p1, Color.blue);
-        if (balanceFactor < 0.5f)
-            SetUnbalanced();
+        return balanceFactor;
     }
 
-    float CalculateBalanceFactor()
+    public bool CheckCP(Vector3 CP)
     {
-        Vector2[] BodyCollapsed;
-        CollapseBody(out BodyCollapsed);
-        return 0.0f;
+        Debug.DrawRay(CP, Vector3.up, Color.blue);
+        CP = Vector3.ProjectOnPlane(CP, Vector3.up);
+        Vector3 p1 = Vector3.ProjectOnPlane(LeftFoot.transform.position + LeftFoot.transform.up * FootVerticalOffset - LeftFoot.transform.forward * FootHorizontalOffset, Vector3.up);
+        Vector3 p2 = Vector3.ProjectOnPlane(RightFoot.transform.position - RightFoot.transform.up * FootVerticalOffset + LeftFoot.transform.forward * FootHorizontalOffset, Vector3.up);
+        Vector3 p3 = Vector3.ProjectOnPlane(p2 + RightFoot.transform.up * FootLength, Vector3.up);
+        Vector3 p4 = Vector3.ProjectOnPlane(p1 - LeftFoot.transform.up * FootLength, Vector3.up);
+        return MathHelpers.CheckPointInQuad(CP, p1, p2, p3, p4);
     }
 
+    public void AddDrag()
+    {
+        foreach (Rigidbody rb in gameObject.GetComponentsInChildren<Rigidbody>()) {
+            rb.drag = Drag;
+            rb.angularDrag = angularDrag;
+        }
+    }
 
     // Update is called once per frame
     void FixedUpdate()
     {
+        return;
         foreach (KeyValuePair<Transform, BodyPart> k in BodyMapper.ToList())
         {
             Transform RagdollBone = k.Key;
@@ -216,6 +225,5 @@ public class BoneDriver : MonoBehaviour
             BodyP.lastOrientation = AnimBone.rotation;
             BodyMapper[k.Key] = BodyP;
         }
-        CalculateBalanceFactor();
     }
 }

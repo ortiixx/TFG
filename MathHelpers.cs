@@ -99,6 +99,14 @@ public class MathHelpers : MonoBehaviour
         return f1 == f2 && f3 == f4 && f4 == f1;
     }
 
+    public static float SampleGaussian(float x, float a, float b, float c)
+    {
+        float numerador = (x - b); numerador *= numerador;
+        float denominador = 2 * x * x;
+        float exponent = -(numerador / denominador);
+        return a * Mathf.Exp(exponent);
+    }
+
     public static bool SegmentIntersection(Vector3 p1, Vector3 p2, Vector3 p3, Vector3 p4, out Vector2 intersection)
     {
         float f1 = Mathf.Sign(Vector3.Cross(p2 - p1, p3 - p1).y);

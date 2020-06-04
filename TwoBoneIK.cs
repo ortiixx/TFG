@@ -9,24 +9,53 @@ public class TwoBoneIK : MonoBehaviour
     public Transform Pole;//direction to bend towards 
     public float UpperElbowRotation;//Rotation offsetts
     public float LowerElbowRotation;
-
+    public float drag;
+    public float angularDrag;
+    public float k1;
+    public float k2;
+    public bool debugRotation;
     private float a;//values for use in cos rule
     private float b;
     private float c;
     private Vector3 en;//Normal of plane we want our arm to be on
+    private Rigidbody rb1;
+    private Rigidbody rb2;
 
     private void Start()
     {
-        Rigidbody rb1 = Upper.GetComponent<Rigidbody>();
-        Rigidbody rb2 = Lower.GetComponent<Rigidbody>();
+        rb1 = Upper.GetComponent<Rigidbody>();
+        rb2 = Lower.GetComponent<Rigidbody>();
         Rigidbody rb3 = End.GetComponent<Rigidbody>();
-        if (rb1)
-            rb1.isKinematic = true;
-        if (rb2)
-            rb2.isKinematic = true;
+        /*
         if (rb3)
-            rb3.isKinematic = true;
+        rb3.isKinematic = true;*/
     }
+
+    void ApplyQuaternion(Quaternion quat, Rigidbody rb)
+    {
+        if (quat != Quaternion.identity)
+        {
+            Vector3 dir;
+            float angle;
+            CharacterJoint Cj = rb.GetComponent<CharacterJoint>();
+            if (Cj)
+                Cj.enableProjection = true;
+            rb.isKinematic = false;
+            quat.ToAngleAxis(out angle, out dir);
+            rb.angularDrag = angularDrag;
+            rb.drag = drag;
+            //rb.detectCollisions = false;
+            dir = Vector3.Project(dir, rb.transform.right);
+            rb.AddTorque(new Vector3(quat.x,quat.y,quat.z) * k1, ForceMode.VelocityChange);
+        }
+    }
+
+    void FollowOrientation(Quaternion Target, Rigidbody rb)
+    {
+        Quaternion q2 = Target*Quaternion.Inverse(rb.transform.rotation);
+        ApplyQuaternion(q2, rb);
+    }
+
 
     void Update()
     {
@@ -34,19 +63,32 @@ public class TwoBoneIK : MonoBehaviour
         b = End.localPosition.magnitude;
         c = Vector3.Distance(Upper.position, Target.position);
         en = Vector3.Cross(Target.position - Upper.position, Pole.position - Upper.position);
-        Debug.Log("The angle is: " + CosAngle(a, b, c));
-        Debug.DrawLine(Upper.position, Target.position);
-        Debug.DrawLine((Upper.position + Target.position) / 2, Lower.position);
+
+        Quaternion UpperTarget = Quaternion.identity;
+        Quaternion LowerTarget = Quaternion.identity;
 
         //Set the rotation of the upper arm
-        Upper.rotation = Quaternion.LookRotation(Target.position - Upper.position, Quaternion.AngleAxis(UpperElbowRotation, Lower.position - Upper.position) * (en));
-        Upper.rotation *= Quaternion.Inverse(Quaternion.FromToRotation(Vector3.forward, Lower.localPosition));
-        Upper.rotation = Quaternion.AngleAxis(-CosAngle(a, c, b), -en) * Upper.rotation;
+        UpperTarget = Quaternion.LookRotation(Target.position - Upper.position, Quaternion.AngleAxis(UpperElbowRotation, Lower.position - Upper.position) * (en));
+        UpperTarget *= Quaternion.Inverse(Quaternion.FromToRotation(Vector3.forward, Lower.localPosition));
+        UpperTarget = Quaternion.AngleAxis(-CosAngle(a, c, b), -en) * UpperTarget;
 
         //set the rotation of the lower arm
-        Lower.rotation = Quaternion.LookRotation(Target.position - Lower.position, Quaternion.AngleAxis(LowerElbowRotation, End.position - Lower.position) * (en));
-        Lower.rotation *= Quaternion.Inverse(Quaternion.FromToRotation(Vector3.forward, End.localPosition));
+        LowerTarget = Quaternion.LookRotation(Target.position - Lower.position, Quaternion.AngleAxis(LowerElbowRotation, End.position - Lower.position) * (en));
+        LowerTarget *= Quaternion.Inverse(Quaternion.FromToRotation(Vector3.forward, End.localPosition));
 
+
+        if (debugRotation)
+        {
+            Upper.rotation = UpperTarget;
+            Lower.rotation = LowerTarget;
+            rb1.isKinematic = true;
+            rb2.isKinematic = true;
+        }
+        else
+        {
+            FollowOrientation(UpperTarget.normalized, rb1);
+            FollowOrientation(LowerTarget.normalized, rb2);
+        }
         //Lower.LookAt(Lower, Pole.position - Upper.position);
         //Lower.rotation = Quaternion.AngleAxis(CosAngle(a, b, c), en);
     }
