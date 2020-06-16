@@ -155,16 +155,7 @@ public class FABRIK_2 : MonoBehaviour
         float l2 = newPos.magnitude * Mathf.Tan(Mathf.Deg2Rad * SocketBall.angle2);
         float l3 = newPos.magnitude * Mathf.Tan(Mathf.Deg2Rad * SocketBall.angle3);
         float l4 = newPos.magnitude * Mathf.Tan(Mathf.Deg2Rad * SocketBall.angle4);
-        Debug.DrawLine(SocketBall.transform.position, O, Color.red, 30f);
-        Debug.DrawLine(SocketBall.transform.position, O + -SocketBall.transform.up * l1, Color.red, 30f); //l1 ynegaxis
-        Debug.DrawLine(SocketBall.transform.position, O + SocketBall.transform.up * l2, Color.blue, 30f); //l2 yposaxis
-        Debug.DrawLine(SocketBall.transform.position, O + SocketBall.transform.forward * l3, Color.cyan, 30f); //l3 xposaxis
-        Debug.DrawLine(SocketBall.transform.position, O + -SocketBall.transform.forward * l4, Color.black, 30f); //l4 xnegaxis
-        Debug.DrawLine(Vector3.zero, Vector3.zero, Color.red, 30f);
-        Debug.DrawLine(Vector3.zero, Vector3.zero + Vector3.right * l1, Color.red, 30f);
-        Debug.DrawLine(Vector3.zero, Vector3.zero + -Vector3.right * l2, Color.blue, 30f);
-        Debug.DrawLine(Vector3.zero, Vector3.zero + Vector3.forward * l3, Color.cyan, 30f);
-        Debug.DrawLine(Vector3.zero, Vector3.zero + -Vector3.forward * l4, Color.black, 30f);
+
         Vector3 Pos = Vector3.zero;
         Vector3 dir = Joint.transform.position - SocketBall.transform.position;
         Pos.x = Vector3.Dot(-SocketBall.transform.up, dir);

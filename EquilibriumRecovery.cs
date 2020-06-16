@@ -93,11 +93,16 @@ public class EquilibriumRecovery : MonoBehaviour
     Vector3 GetDesiredPS(float dl, float dh)
     {
         Vector3 res = Vector3.zero;
+        Vector3 angularMomentum = new Vector3(
+        CM.inertiaTensor.x * CM.angularVelocity.x,
+        CM.inertiaTensor.y * CM.angularVelocity.y,
+        CM.inertiaTensor.z * CM.angularVelocity.z
+        );
         if (CM)
         {
             res.y = LeftEffector.position.y;
-            res.x = CM.position.x + CM.position.y * ((dl * CM.velocity.x * mass) / GroundReactionForce());
-            res.z = CM.position.z + CM.position.y * ((dl * CM.velocity.z * mass) / GroundReactionForce());
+            res.x = CM.position.x + CM.position.y * ((dl * CM.velocity.x * mass) / GroundReactionForce()) + ((dh * angularMomentum.z) / GroundReactionForce());
+            res.z = CM.position.z + CM.position.y * ((dl * CM.velocity.z * mass) / GroundReactionForce()) - ((dh * angularMomentum.x) / GroundReactionForce());
         }
         Debug.DrawLine(res, res - Vector3.up, Color.yellow);
         return res;
@@ -108,11 +113,11 @@ public class EquilibriumRecovery : MonoBehaviour
         return CM.velocity.y + mass * Physics.gravity.magnitude;
     }
 
-    public static Vector3 Bezier2(Vector3 s, Vector3 p, Vector3 e, float t)
+    public static Vector3 Bezier3(Vector3 s, Vector3 p1, Vector3 p2, Vector3 e, float t)
     {
         t = Mathf.Clamp(t, .0f, 1.0f);
         float rt = 1 - t;
-        return rt * rt * s + 2 * rt * t * p + t * t * e;
+        return rt * rt * rt * s + 3 * rt * rt * t * p1 + 3 * rt * t * t * p2 + t * t * t * e;
     }
 
     bool CheckIsRightFoot()
@@ -123,13 +128,14 @@ public class EquilibriumRecovery : MonoBehaviour
     IEnumerator PerformStep(bool isRightFoot)
     {
         Vector3 velo = CM.velocity;
-        float ControlPointHeight = .2f;
+        float ControlPointHeight = .4f;
         float SimulationTime = .0f;
         Transform Foot = isRightFoot ? RightFoot : LeftFoot;
         Transform Effector = isRightFoot ? RightEffector : LeftEffector;
         Vector3 MidPoint = isRightFoot ? LeftFoot.position : RightFoot.position;    //We want the midpoint between the other foot and the destination
         Vector3 InitialFootLocation = Foot.position;
-        Vector3 FootControlPoint = (Foot.position + DesiredStep.position) / 2f + Vector3.up * ControlPointHeight;
+        Vector3 FootControlPoint1 = (DesiredStep.position - Foot.position) / 5f; FootControlPoint1 += Foot.position; FootControlPoint1 += Vector3.up * ControlPointHeight;
+        Vector3 FootControlPoint2 = FootControlPoint1; FootControlPoint2.y = Foot.position.y;
         Vector3 vec = DesiredStep.position;
         Quaternion AerialPhase = isRightFoot ? RightFootAerial : LeftFootAerial;
         Quaternion GroundPhase = isRightFoot ? OriginalRightFootRotation : OriginalLeftFootRotation;
@@ -152,12 +158,12 @@ public class EquilibriumRecovery : MonoBehaviour
             }
             else
             {
-                Vector3 pos = Bezier2(InitialFootLocation, FootControlPoint, DesiredStep.position, SimulationTime*MaxStepSpeed);
+                Vector3 pos = Bezier3(InitialFootLocation, FootControlPoint1, FootControlPoint2, DesiredStep.position, SimulationTime*MaxStepSpeed);
                 Effector.position = pos;
                 //Speed = MathHelpers.SampleGaussian(SimulationTime, MaxStepSpeed, StepDuration/2f, StepDuration);
             }
             CM.AddForce((MidPoint - transform.position) * CMControlForce*MaxStepSpeed*2.1f, ForceMode.Acceleration);
-            Debug.DrawLine(FootControlPoint, (Foot.position + DesiredStep.position) / 2f, Color.red);
+            Debug.DrawLine(FootControlPoint1, (Foot.position + DesiredStep.position) / 2f, Color.red);
             Debug.DrawLine(transform.position, MidPoint);
             SimulationTime += Time.deltaTime;
             yield return null;
@@ -213,16 +219,11 @@ public class EquilibriumRecovery : MonoBehaviour
         }
         if (CM)
         {
-            Vector3 P1 = OriginalLeftFootRelativeCM + LeftFoot.position;
-            Vector3 P2 = OriginalRightFootRelativeCM + RightFoot.position;
-            Vector3 OriginalCM = (P1 + P2) / 2f;
-            Vector3 ForceControl = OriginalCM-CM.position;
             Vector3 Torque = Vector3.zero;
             Torque.x = q2.x;
             Torque.y = 0;
             Torque.z = q2.z;
             CM.AddTorque(Torque * CMControl);
-            CM.AddForce(CMControlForce * ForceControl, ForceMode.Acceleration);
         }
     }
 
@@ -246,16 +247,20 @@ public class EquilibriumRecovery : MonoBehaviour
         Ray r2 = new Ray(RightFoot.position, Vector3.down);
         RaycastHit hit1, hit2;
         Vector3 direction = Vector3.up;
-        direction.y = desiredCMHeight - CM.position.y;
+        Vector3 P1 = OriginalLeftFootRelativeCM + LeftFoot.position;
+        Vector3 P2 = OriginalRightFootRelativeCM + RightFoot.position;
+        Vector3 OriginalCM = (P1 + P2) / 2f;
         if (Physics.Raycast(r1, out hit1, stepCheckDistance, lm))
         {
-            Vector3 Force = Vector3.Dot(d1, Vector3.up) * direction * force;
-            gameObject.GetComponent<Rigidbody>().AddForce(Force * Driver.GetBalanceFactor() * 1.1f, ForceMode.VelocityChange);
+            float magnitude = Vector3.Dot(d1, Vector3.up)  * force;
+            CM.AddForce(direction * magnitude, ForceMode.VelocityChange);
+            CM.AddForce((P1 - CM.position) * force, ForceMode.VelocityChange);
         }
         if (Physics.Raycast(r2, out hit2, stepCheckDistance, lm))
         {
-            Vector3 Force = Vector3.Dot(d2, Vector3.up) * direction * force;
-            gameObject.GetComponent<Rigidbody>().AddForce(Force * Driver.GetBalanceFactor() * 1.1f, ForceMode.VelocityChange);
+            float magnitude = Vector3.Dot(d2, Vector3.up) * force;
+            CM.AddForce(direction*magnitude, ForceMode.VelocityChange);
+            CM.AddForce((P2 - CM.position) * magnitude, ForceMode.VelocityChange);
         }
     }
 

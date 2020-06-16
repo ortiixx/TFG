@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class FABRIK : MonoBehaviour
 {
-    public List<Transform> Joints;
+    public List<Rigidbody> Joints;
     public Transform[] UpperObjectives;
     public Transform[] LowerObjectives;
     public Vector3 InitialRootLocation;
@@ -23,7 +23,7 @@ public class FABRIK : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        Joints = new List<Transform>();
+        Joints = new List<Rigidbody>();
         Lengths = new List<float>();
         foreach (FABRIKJoint t in transform.GetComponentsInChildren<FABRIKJoint>())
         {
@@ -191,14 +191,8 @@ public class FABRIK : MonoBehaviour
         Joints[0].transform.position = InitialRootLocation;
         for (int i = 1; i < Joints.Count; i++)
         {
-            /*RaycastHit hit;
-            Vector3 dir = (Joints[i].transform.position - Joints[i - 1].transform.position);
-            Ray ray = new Ray(Joints[i].transform.position, dir.normalized);
-            if (Physics.Raycast(ray, out hit, dir.magnitude, layerMask))
-                Joints[i].transform.position = hit.point + hit.normal * 0.02f;*/
             FABRIKJoint Fab = Joints[i - 1].GetComponent<FABRIKJoint>();
             Joints[i].transform.parent = null;
-            /*
             switch (Fab.RestrictionType)
             {
                 case FABRIKJoint.JointType.Hinge:
@@ -207,14 +201,13 @@ public class FABRIK : MonoBehaviour
                 case FABRIKJoint.JointType.Socketball:
                     SocketBallConstraint(Joints[i - 1], Joints[i], false);
                     break;
-            }*/
+            }
             Joints[i].transform.position = Joints[i - 1].transform.position + Joints[i - 1].rotation * Fab.Forward * Lengths[i - 1];
             ReorientateJoint(Joints[i - 1].transform, Joints[i].transform);
             Joints[i].transform.position = Joints[i - 1].transform.position + Joints[i - 1].rotation * Fab.Forward * Lengths[i - 1];
 
             Joints[i].transform.parent = Joints[i - 1].transform;
         }
-        //ReorientateJoint(Joints[Joints.Count-1], Objective);
     }
 
     void ForwardReach()
@@ -222,11 +215,6 @@ public class FABRIK : MonoBehaviour
         Joints[Joints.Count - 1].transform.position = Target;
         for (int i = Joints.Count - 1; i > 0; i--)
         {
-            /*RaycastHit hit;
-            Vector3 dir = (Joints[i].transform.position - Joints[i - 1].transform.position);
-            Ray ray = new Ray(Joints[i - 1].transform.position, dir.normalized);
-            if (Physics.Raycast(ray, out hit, dir.magnitude, layerMask))
-                Joints[i].transform.position = hit.point + hit.normal * 0.02f;*/
             FABRIKJoint Fab = Joints[i-1].GetComponent<FABRIKJoint>();
             float r = Lengths[i - 1];
             float d = Vector3.Distance(Joints[i - 1].transform.position, Joints[i].transform.position);
@@ -244,8 +232,6 @@ public class FABRIK : MonoBehaviour
     {
         parentV = Joints[0].up;
         quatero = Joints[0].rotation;
-        //InitialRootLocation = (LowerObjectives[0].position + LowerObjectives[1].position) / 2 + OffsetDown;
-        //Joints[0].position = InitialRootLocation;
         Target = (UpperObjectives[0].position + UpperObjectives[1].position) / 2f + OffsetUp;
         TargetLastPosition = Target;
         if (Vector3.Distance(InitialRootLocation, Target) > TotalLength)
@@ -261,7 +247,6 @@ public class FABRIK : MonoBehaviour
                 Joints[i].transform.position = Joints[i - 1].transform.position * (1f - lambda) + Target * lambda;
                 ReorientateJoint(Joints[i - 1].transform, Joints[i].transform);
                 Joints[i].transform.position = Joints[i - 1].transform.position + Joints[i-1].rotation* FJ.Forward * Lengths[i - 1];
-
             }
         }
         else
