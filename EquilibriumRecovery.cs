@@ -21,6 +21,7 @@ public class EquilibriumRecovery : MonoBehaviour
     public float MaxStepSpeed = 4f;
     public float StepDuration = 5f;
     public float stepCheckDistance = 0.25f;
+    public float HipForce = 20f;
     public float CMAngularControl;
     public float CMControlForce;
     public float mass;
@@ -62,6 +63,7 @@ public class EquilibriumRecovery : MonoBehaviour
     private bool RecoveryDone = false;
     private ELocomotionState LocomotionState;
     private float desiredCMHeight;
+    private Vector3 OriginalCM;
 
     // Start is called before the first frame update
     void Start()
@@ -88,6 +90,8 @@ public class EquilibriumRecovery : MonoBehaviour
 
         OriginalLeftFootRelativeCM = CM.position - LeftFoot.position;
         OriginalRightFootRelativeCM = CM.position - RightFoot.position;
+        Vector3 Midpoint = (LeftFoot.position + RightFoot.position) / 2.0f;
+        OriginalCM = CM.position;
     }
 
     Vector3 GetDesiredPS(float dl, float dh)
@@ -128,7 +132,7 @@ public class EquilibriumRecovery : MonoBehaviour
     IEnumerator PerformStep(bool isRightFoot)
     {
         Vector3 velo = CM.velocity;
-        float ControlPointHeight = .4f;
+        float ControlPointHeight = .3f;
         float SimulationTime = .0f;
         Transform Foot = isRightFoot ? RightFoot : LeftFoot;
         Transform Effector = isRightFoot ? RightEffector : LeftEffector;
@@ -147,10 +151,10 @@ public class EquilibriumRecovery : MonoBehaviour
         while (Vector3.Distance(Effector.position, DesiredStep.position)>effectorDistanceEpsilon)// && Vector3.Distance(CM.position, MidPoint)>CMDistanceEpsilon)
         {
             float t = Vector3.Distance(Foot.position, DesiredStep.position) / Vector3.Distance(InitialFootLocation, DesiredStep.position);
-            if (t<0.5f)
-                Foot.rotation = Quaternion.Slerp(GroundPhase, AerialPhase, t);
-            else
-                Foot.rotation = Quaternion.Slerp(AerialPhase, GroundPhase,  t);
+            //if (t<0.5f)
+                //Foot.rotation = Quaternion.Slerp(GroundPhase, AerialPhase, t);
+            //else
+                //Foot.rotation = Quaternion.Slerp(AerialPhase, GroundPhase,  t);
 
             if(Vector3.Distance(Effector.position, DesiredStep.position) < effectorDistanceEpsilon)
             {
@@ -171,7 +175,7 @@ public class EquilibriumRecovery : MonoBehaviour
         vec = Effector.position;
         vec.y = DesiredStep.position.y;
         Effector.position = vec;
-        Foot.rotation = GroundPhase;
+        //Foot.rotation = GroundPhase;
         yield return new WaitForSecondsRealtime(0.2f);
         CanMoveFoot = true;
         lastStepRight = isRightFoot;
@@ -227,16 +231,23 @@ public class EquilibriumRecovery : MonoBehaviour
         }
     }
 
-    void OnGUI()
-    {
-        GUI.Label(new Rect(25, 285, 100, 30), "Max Step speed");
-        MaxStepSpeed = GUI.HorizontalSlider(new Rect(25, 300, 100, 30), MaxStepSpeed, 0.0F, 20.0F);
-    }
-
     void CalculateCP()
     {
         RaycastHit Hit;
 
+    }
+
+    private void HipStrategy()
+    {
+        Vector3 Midpoint = (LeftFoot.position + RightFoot.position) / 2.0f;
+        Vector3 d1 = (Midpoint - CM.position).normalized;
+        Vector3 d2 = (Midpoint - Spine.position).normalized;
+        d2.Scale(new Vector3(1.8f, 1.0f, 1.8f));
+        Vector3 Reflection = Vector3.Reflect(d2, Vector3.up);
+        Vector3 Target = Midpoint + Reflection * Mathf.Abs(CM.position.y - Midpoint.y);
+        Vector3 offset = Target - OriginalCM;
+        Debug.DrawLine(CM.position, Midpoint+Reflection * Mathf.Abs(CM.position.y-Midpoint.y), Color.red);
+        CM.AddForce((Target-CM.position) * HipForce, ForceMode.VelocityChange);
     }
 
     private void AddFootForces()
@@ -254,14 +265,15 @@ public class EquilibriumRecovery : MonoBehaviour
         {
             float magnitude = Vector3.Dot(d1, Vector3.up)  * force;
             CM.AddForce(direction * magnitude, ForceMode.VelocityChange);
-            CM.AddForce((P1 - CM.position) * force, ForceMode.VelocityChange);
+            //CM.AddForce((P1 - CM.position) * force, ForceMode.VelocityChange);
         }
         if (Physics.Raycast(r2, out hit2, stepCheckDistance, lm))
         {
             float magnitude = Vector3.Dot(d2, Vector3.up) * force;
             CM.AddForce(direction*magnitude, ForceMode.VelocityChange);
-            CM.AddForce((P2 - CM.position) * magnitude, ForceMode.VelocityChange);
+            //CM.AddForce((P2 - CM.position) * force, ForceMode.VelocityChange);
         }
+        //HipStrategy();
     }
 
     private void CheckBalance()

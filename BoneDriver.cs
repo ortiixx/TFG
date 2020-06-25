@@ -143,6 +143,23 @@ public class BoneDriver : MonoBehaviour
         return intersectionLength / totalLength;
     }
 
+    public int GetBucket(Vector3 or, Vector3 end)
+    {
+        Vector3 CM = Vector3.ProjectOnPlane(transform.position, Vector3.up);
+        or = or-CM;   //In order to get it in cm-space
+        end = end-CM;
+        float f = Vector3.Dot(Vector3.forward, (or - end).normalized);
+        if (f < -0.5f)
+            return 0;
+        else if (f < 0.0f)
+            return 1;
+        else if (f < 0.5f)
+            return 2;
+        else
+            return 3;
+    }
+
+
     public float GetBalanceFactor()
     {
         float counterPos = 0;
@@ -151,6 +168,7 @@ public class BoneDriver : MonoBehaviour
         Vector3 p2 = Vector3.ProjectOnPlane(RightFoot.transform.position - RightFoot.transform.up * FootVerticalOffset + LeftFoot.transform.forward * FootHorizontalOffset, Vector3.up);
         Vector3 p3 = Vector3.ProjectOnPlane(p2 + RightFoot.transform.up * FootLength, Vector3.up);
         Vector3 p4 = Vector3.ProjectOnPlane(p1 - LeftFoot.transform.up * FootLength, Vector3.up);
+        List<float> buckets = new List<float>(){ 0.0f, 0.0f, 0.0f, 0.0f };//contains 4 buckets, mapped to cos[-1,-0.5],[-0.5,0.0],[0.0,0.5],[0.5,1]
 
         foreach (KeyValuePair<Transform, BodyPart> k in BodyMapper.ToList())
         {
@@ -174,19 +192,26 @@ public class BoneDriver : MonoBehaviour
                 else if (b1 != b2)
                 {
                     Debug.DrawLine(bp1, bp2, Color.yellow);
-                    counterPos += rb.mass*CheckPointRatio(bp1,bp2,p1,p2,p3,p4);
+                    float r = CheckPointRatio(bp1, bp2, p1, p2, p3, p4);
+                    counterPos += rb.mass*r;
+                    buckets[GetBucket(bp1, bp2)] += rb.mass*(1.0f-r);
                 }
                 else
                 {
+                    buckets[GetBucket(bp1, bp2)] += rb.mass;
                     Debug.DrawLine(bp1, bp2, Color.red);
                 }
             }
         }
+        float t = 2.0f*Mathf.Min(buckets[0],buckets[3]);
+        t += 2.0f*Mathf.Min(buckets[1],buckets[2]);
+        counterPos += t;
         float balanceFactor = counterPos / counterTot;
         Debug.DrawLine(p1, p2, Color.blue);
         Debug.DrawLine(p3, p4, Color.blue);
         Debug.DrawLine(p2, p3, Color.blue);
         Debug.DrawLine(p4, p1, Color.blue);
+        Debug.Log(balanceFactor);
         return balanceFactor;
     }
 
@@ -212,7 +237,7 @@ public class BoneDriver : MonoBehaviour
     // Update is called once per frame
     void FixedUpdate()
     {
-        return;
+        GetBalanceFactor();
         foreach (KeyValuePair<Transform, BodyPart> k in BodyMapper.ToList())
         {
             Transform RagdollBone = k.Key;

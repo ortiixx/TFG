@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class FABRIK : MonoBehaviour
 {
-    public List<Rigidbody> Joints;
+    public List<Transform> Joints;
     public Transform[] UpperObjectives;
     public Transform[] LowerObjectives;
     public Vector3 InitialRootLocation;
@@ -23,7 +23,7 @@ public class FABRIK : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        Joints = new List<Rigidbody>();
+        Joints = new List<Transform>();
         Lengths = new List<float>();
         foreach (FABRIKJoint t in transform.GetComponentsInChildren<FABRIKJoint>())
         {
